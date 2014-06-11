@@ -1,73 +1,50 @@
 #include <PID_v1.h>
 #include <Servo.h> 
+#include <NewPing.h>
+
+#define TRIGGER_PIN  12
+#define ECHO_PIN     11
+#define MAX_DISTANCE 60
+
+NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE);
 
 double Setpoint, Input, Output;
-#define trigPin 2
-#define echoPin 3
-long duration;
-float distance, filtered_distance, sum;
 double kp, ki, kd;
+float distance;
+
 Servo myservo;
 PID myPID(&Input, &Output, &Setpoint,kp,ki,kd, DIRECT);
 
-float filter[] = {
-  141667814, 30535347, 33525554, 36521970, 39499313, 42412875, 
-  45222844, 47904896, 50434808, 52787330, 54946901, 56905861, 
-  58644063, 60115628, 61271939, 62115584, 62741988, 63086021, 
-  63086021, 62741988, 62115584, 61271939, 60115628, 58644063, 
-  56905861, 54946901, 52787330, 50434808, 47904896, 45222844, 
-  42412875, 39499313, 36521970, 33525554, 30535347, 141667814
-};
-float temp_data[sizeof(filter)/sizeof(filter[0])]; 
-
 void setup() {
-  Serial.begin (9600);
-  pinMode(trigPin, OUTPUT);
-  pinMode(echoPin, INPUT);
-  myservo.attach(9);
-
-  kp = 6;
-  ki = 4.5;
-  kd = 4.5;
-  Setpoint = 25;
+  Serial.begin(115200);
+  myservo.attach(3);
+  kp = 0.8;
+  ki = 0.07;
+  kd = 0.12;
+  Setpoint = 20;
 
   myPID.SetTunings(kp, ki, kd);
-  myPID.SetOutputLimits	(-45,45);
+  myPID.SetOutputLimits	(62, 88);
   myPID.SetMode(AUTOMATIC);
-
-  for (int i =0; i<sizeof(filter)/sizeof(filter[0]); i++)
-    sum+=filter[i];
 }
 
 void loop() {
+  //Read the position of ball, the sensor ping 4 times 
+  //and get the average ecoh time, 
+  //US_ROUNDTRIP_CM is a constance set by the ping library 
+ unsigned int uS = sonar.ping_median(5);
+  distance = uS/ US_ROUNDTRIP_CM;  
+  //distance = sonar.ping_cm();
 
-  digitalWrite(trigPin, LOW);  
-  delayMicroseconds(2);
-  digitalWrite(trigPin, HIGH);
-  delayMicroseconds(10); 
-  digitalWrite(trigPin, LOW);
-  duration = pulseIn(echoPin, HIGH);
-  if ((duration/2) / 29.1 <=200 && (duration/2) / 29.1 >= 0) 
-    distance = (duration/2) / 29.1;
+  //print the output
+  Serial.println(distance);
 
-  filtered_distance = 0;
-  for (int i = 1; i< sizeof(filter)/sizeof(filter[0]); i++) 
-    temp_data[i-1] = temp_data[i];
+  //compute teh PID controller
+  Input = distance;
+  myPID.Compute();
+  myservo.write(Output);
 
-  temp_data[sizeof(filter)/sizeof(filter[0])-1] = distance;
-
-  for (int i = 0; i < sizeof(filter)/sizeof(filter[0]); i++) 
-    filtered_distance += temp_data[i]*filter[i]/sum;
-
-  Serial.print(distance);
-  Serial.print(", ");
-  Serial.println(filtered_distance);
-
-   Input = filtered_distance;
-    myPID.Compute();
-    myservo.write(1470-Output); 
-
-
+  //turn the PID controller if serial is available
   if (Serial.available() > 0) {
     kp  = Serial.parseFloat(); 
     ki = Serial.parseFloat(); 
@@ -75,24 +52,3 @@ void loop() {
     myPID.SetTunings(kp, ki, kd);
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
